@@ -84,9 +84,6 @@ parser.add_argument('--mode',
 parser.add_argument('--save_checkpoint', type=bool, default=True,
                     help='whether to save the model')
 
-# parser.add_argument('--train', type=bool, default=True,
-#                     help='Train the model')
-
 parser.add_argument('--train', dest='train', help='Train the model', action='store_true')
 parser.add_argument('--no-train', dest='train', help='Train the model', action='store_false')
 
