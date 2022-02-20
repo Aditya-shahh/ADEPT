@@ -15,14 +15,11 @@ class Model_Prompt_Head(torch.nn.Module):
         super(Model_Prompt_Head, self).__init__()
         
         self.bert = bert
-        
-        
-        
+
         self.fcbert1 = nn.Linear(768, 128)
         self.fcbert2 = nn.Linear(128, 16)
         self.fcbert3 = nn.Linear(16, num_classes)
 
-        
         self.dropout = nn.Dropout(0.3)
         
 
