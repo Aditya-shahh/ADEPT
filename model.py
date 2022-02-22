@@ -5,16 +5,16 @@ import torch.nn.functional as F
 
 
 
-class Model_Prompt_Head(torch.nn.Module):
+class Prompt_Head(torch.nn.Module):
     
-    def __init__(self, bert, num_classes):
+    def __init__(self, base_model, num_classes):
         """
         In the constructor we instantiate two nn.Linear modules and assign them as
         member variables.
         """
-        super(Model_Prompt_Head, self).__init__()
+        super(Prompt_Head, self).__init__()
         
-        self.bert = bert
+        self.base_model = base_model
 
         self.fcbert1 = nn.Linear(768, 128)
         self.fcbert2 = nn.Linear(128, 16)
@@ -31,10 +31,10 @@ class Model_Prompt_Head(torch.nn.Module):
         well as arbitrary operators on Tensors.
         """
         # 1, 768
-        output_bert = self.bert(input_ids = input_ids, attention_mask = attention_mask).pooler_output
+        output = self.base_model(input_ids = input_ids, attention_mask = attention_mask).pooler_output
         
         
-        output = self.dropout(F.leaky_relu(self.fcbert1(output_bert), .1))    #1, 128
+        output = self.dropout(F.leaky_relu(self.fcbert1(output), 0.1))    #1, 128
          
         output = self.dropout(F.leaky_relu(self.fcbert2(output), 0.1))     #1, 16
         

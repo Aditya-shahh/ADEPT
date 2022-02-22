@@ -11,11 +11,11 @@ import torch.nn as nn
 
 from torch.optim import lr_scheduler
 
-from dataset import IMDB_Dataset, get_imdb_dataset
+from dataset import create_dataset_object, load_imdb_dataset, load_topic_dataset
 from dataloader import get_dataloaders
 
 from prompt import PROMPTEmbedding
-from model import APT, Model_Prompt_Head
+from model import APT, Prompt_Head
 from utils import get_accuracy, count_parameters, freeze_params
 
 from transformers import RobertaTokenizer, RobertaForSequenceClassification, RobertaModel
@@ -186,8 +186,6 @@ def train_model(config_train):
 
                 print("F1: {:.4f}, Precision: {:.4f}, Recall : {:.4f}.".format(f1, pre, recall))
 
-
-
                 if save_checkpoint:
                 
                     if phase == 'Val':
@@ -284,7 +282,14 @@ def main():
     #Dataset choice
     if dataset == 'imdb':
 
-        train_data_object, test_data_object, val_data_object = get_imdb_dataset(dataset, number_of_tokens, tokenizer)
+        train_text, train_labels, test_text, test_labels, valid_text, valid_labels = load_imdb_dataset(dataset)
+
+        train_data_object = create_dataset_object(train_text, train_labels, number_of_tokens, tokenizer, dataset)
+        
+        test_data_object  = create_dataset_object(test_text, test_labels, number_of_tokens, tokenizer, dataset)
+        
+        val_data_object = create_dataset_object(valid_text, valid_labels, number_of_tokens, tokenizer, dataset)
+
 
         dataloaders = get_dataloaders(train_data_object, test_data_object, val_data_object, batch_size)
 
@@ -292,7 +297,19 @@ def main():
 
 
     elif dataset == 'topic':
-        pass
+
+        train_text, train_labels, test_text, test_labels, valid_text, valid_labels = load_topic_dataset(dataset)
+
+        train_data_object = create_dataset_object(train_text, train_labels, number_of_tokens, tokenizer, dataset)
+        
+        test_data_object  = create_dataset_object(test_text, test_labels, number_of_tokens, tokenizer, dataset)
+        
+        val_data_object = create_dataset_object(valid_text, valid_labels, number_of_tokens, tokenizer, dataset)
+
+
+        dataloaders = get_dataloaders(train_data_object, test_data_object, val_data_object, batch_size)
+
+        num_labels = 10
     
     elif dataset == 'emotion':
 
@@ -318,7 +335,7 @@ def main():
 
             roberta.set_input_embeddings(prompt_emb)
 
-            model = Model_Prompt_Head(roberta, num_labels)
+            model = Prompt_Head(roberta, num_labels)
 
     elif mode == 'prompt':
         if model_type == 'roberta-base':
