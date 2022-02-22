@@ -70,6 +70,10 @@ def get_imdb_dataset(dataset, number_of_tokens, tokenizer):
         test_data = pd.read_csv(test_path)
         valid_data = pd.read_csv(valid_path)
 
+        train_data = train_data.head(200)
+        test_data = test_data.head(100)
+        valid_data = valid_data.head(200)
+
         train_text = train_data['text']
         train_labels = train_data['label']
 

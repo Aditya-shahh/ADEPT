@@ -15,8 +15,8 @@ from dataset import IMDB_Dataset, get_imdb_dataset
 from dataloader import get_dataloaders
 
 from prompt import PROMPTEmbedding
-from model import Model_Prompt_Head
-from utils import get_accuracy
+from model import APT, Model_Prompt_Head
+from utils import get_accuracy, count_parameters, freeze_params
 
 from transformers import RobertaTokenizer, RobertaForSequenceClassification, RobertaModel
 from transformers import AdamW, get_linear_schedule_with_warmup
@@ -45,8 +45,11 @@ parser.add_argument('--lr', default=8e-5, type=float,
 parser.add_argument('--n_tokens', default=20, type=int,
                     help='number of soft prompt tokens')
 
-parser.add_argument('--n_modules', default=1, type=int,
+parser.add_argument('--adapter_modules', default=1, type=int,
                     help='number of adapter modules')
+
+parser.add_argument('--adapter_hidden_size', default=16, type=int,
+                    help='hidden size of adapter module')
 
 parser.add_argument('--model',
                     default='roberta-base',
@@ -91,6 +94,10 @@ parser.set_defaults(train=True)
  
 parser.add_argument('--test', type=bool, default=False,
                     help='Test the model')
+
+ 
+parser.add_argument('--count_params', type=bool, default=False,
+                    help='Count model parameters')
 
 args = parser.parse_args()
 
@@ -141,7 +148,11 @@ def train_model(config_train):
                     
                     labels = labels.to(device)
 
-                    output = model(input_ids = input_ids, attention_mask = attention_mask)
+                    if mode == 'prompt':
+                        output = model(input_ids = input_ids, attention_mask = attention_mask).logits
+
+                    else:
+                        output = model(input_ids = input_ids, attention_mask = attention_mask)
 
                     loss = criterion(output, labels)
 
@@ -194,6 +205,7 @@ def test_model(config_test):
     test_loader = config_test['test_loader']
     device = config_test['device']
     criterion = config_test['criterion']
+    mode = config_test['mode']
 
     model = model.to(device)
 
@@ -220,7 +232,12 @@ def test_model(config_test):
             
             with torch.no_grad():
 
-                output = model(input_ids = input_ids, attention_mask = attention_mask)
+
+                if mode == 'prompt':
+                    output = model(input_ids = input_ids, attention_mask = attention_mask).logits
+                    
+                else:
+                    output = model(input_ids = input_ids, attention_mask = attention_mask)
 
                 loss = criterion(output, labels)
                 
@@ -293,9 +310,7 @@ def main():
 
             roberta = RobertaModel.from_pretrained(model_type)
 
-            for param in roberta.parameters():
-                param.requires_grad = False
-
+            roberta = freeze_params(roberta)
             
             prompt_emb = PROMPTEmbedding(roberta.get_input_embeddings(), 
                                         n_tokens= number_of_tokens, 
@@ -305,21 +320,50 @@ def main():
 
             model = Model_Prompt_Head(roberta, num_labels)
 
-        ''
-
     elif mode == 'prompt':
         if model_type == 'roberta-base':
-            pass
-        pass
+
+            model = RobertaForSequenceClassification.from_pretrained(model_type, 
+                                                         num_labels=num_labels,
+                                                         output_attentions=False,
+                                                         output_hidden_states=False)
+
+            model =  freeze_params(model)
+
+        
+            prompt_emb = PROMPTEmbedding(model.get_input_embeddings(), 
+                                        n_tokens= number_of_tokens, 
+                                        initialize_from_vocab=True)
+
+            model.set_input_embeddings(prompt_emb)
 
     elif mode == 'apt':
         if model_type == 'roberta-base':
-            pass
-        pass
+
+            adapter_hidden_size = args.adapter_hidden_size
+            adapter_modules = args.adapter_modules
+            
+            
+            roberta = RobertaForSequenceClassification.from_pretrained(model_type, 
+                                                         num_labels=num_labels,
+                                                         output_attentions=False,
+                                                         output_hidden_states=False)
+
+            roberta = freeze_params(roberta)
+
+            prompt_emb = PROMPTEmbedding(roberta.get_input_embeddings(), 
+                      n_tokens= number_of_tokens, 
+                      initialize_from_vocab=True)
+
+            roberta.set_input_embeddings(prompt_emb)
+
+            model = APT(roberta, adapter_hidden_size, adapter_modules)
 
     else:
         print('Select one of the given modes')
 
+    if args.count_params:
+        count_parameters(model)
 
     # Check GPU
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -329,8 +373,13 @@ def main():
 
     if args.train:
 
+
         #optimizer
-        optimizer = AdamW(model.parameters(), lr = learning_rate, eps=1e-8)
+        if mode == 'prompt':
+            optimizer = AdamW([model.roberta.embeddings.word_embeddings.learned_embedding], lr = learning_rate, eps=1e-8)
+
+        else:
+            optimizer = AdamW(model.parameters(), lr = learning_rate, eps=1e-8)
 
         # Defining LR Scheduler
         scheduler = get_linear_schedule_with_warmup(
@@ -373,7 +422,8 @@ def main():
         'model': model, 
         'test_loader':dataloaders['Test'], 
         'device': device, 
-        'criterion':criterion
+        'criterion':criterion,
+        'mode':mode
         }
 
         test_model(config_test)

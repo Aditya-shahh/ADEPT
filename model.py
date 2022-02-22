@@ -41,3 +41,60 @@ class Model_Prompt_Head(torch.nn.Module):
         output = self.fcbert3(output)    #1, 3
          
         return output
+
+
+
+class APT(torch.nn.Module):
+    
+    def __init__(self, base_model, adapter_hidden, adapter_modules):
+
+        super(APT, self).__init__()
+        
+        
+        self.base_model = base_model
+
+        self.adapter_modules = adapter_modules
+        
+        self.adapter_1 = nn.Linear(768, adapter_hidden)
+        
+        self.adapter_2 = nn.Linear(adapter_hidden, 768)
+
+
+    def forward(self, input_ids, attention_mask):
+        
+        # get output embeddings
+
+        output_embed = self.base_model.roberta.embeddings(input_ids = input_ids)
+        
+        roberta_text = output_embed
+
+
+        if self.adapter_modules == 1:
+        
+        
+            # pass the output of embeddings into first 4 encoder layers
+            for i in range(4):
+                
+                roberta_text = self.base_model.roberta.encoder.layer[i](roberta_text)[0]
+                
+                
+            # pass the ouput of 4th encoder layer to adapter module
+            roberta_text = self.adapter_1(roberta_text)
+            
+            roberta_text = self.adapter_2(roberta_text)
+            
+            
+            # output of adapter layer to 5th encoder layer and so on
+                
+            for i in range(4, 12):
+                roberta_text = self.base_model.roberta.encoder.layer[i](roberta_text)[0]
+        
+        
+            # final output to classifier head
+            output = self.base_model.classifier(roberta_text)
+            
+            # return final oitput
+            return output
+
+        else:
+            print("Upto 3 adapter modules permitted")

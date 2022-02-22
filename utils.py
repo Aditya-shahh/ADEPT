@@ -24,3 +24,13 @@ def count_parameters(model):
         total_params+=param
     print(table)
     print(f"Total Trainable Params: {total_params}")
+    print()
+
+
+
+def freeze_params(model):
+  
+  for param in model.parameters():
+    param.requires_grad = False
+
+  return model
