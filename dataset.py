@@ -1,11 +1,13 @@
 
 import os
+from pydoc import describe
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 import torch
 from torch.utils.data import Dataset 
 
-
+import sys
 
 class CustomDataset(torch.utils.data.Dataset):
     """
@@ -24,14 +26,8 @@ class CustomDataset(torch.utils.data.Dataset):
         sample = {}
         text = self.text[idx]
 
-        if self.dataset == 'imdb':
-            max_length = 512
-        elif self.dataset == 'topic':
-            max_length = 256
-        elif self.dataset == 'emotion':
-            max_length = 256
-        else:
-            print('Enter valid dataset')
+        max_length = 512
+
 
         #Roberta Tokenizer to tokenize the text
         inputs = self.tokenizer.encode_plus(text, 
@@ -52,8 +48,9 @@ class CustomDataset(torch.utils.data.Dataset):
         
 
 
-
 def load_imdb_dataset(dataset):
+
+
 
         if os.path.exists(os.path.join(dataset, "train.csv")):
 
@@ -76,6 +73,9 @@ def load_imdb_dataset(dataset):
 
         else:
             raise FileNotFoundError
+        
+
+        # load data
 
         train_data = pd.read_csv(train_path)
         test_data = pd.read_csv(test_path)
@@ -133,13 +133,6 @@ def load_topic_dataset(dataset):
         test_data = pd.read_csv(test_path)
         valid_data = pd.read_csv(valid_path)
 
-        # train_data_v0 = train_data_v0.head(200)
-        # train_data_v1 = train_data_v1.head(200)
-
-        # test_data = test_data.head(100)
-        # valid_data = valid_data.head(200)
-
-
         train_text_v0 = train_data_v0['input_string'].tolist()
         train_labels_v0 = train_data_v0['label'].tolist()
 
@@ -166,6 +159,54 @@ def load_topic_dataset(dataset):
 
         return train_text, train_labels, test_text, test_labels, valid_text, valid_labels
 
+
+def load_agnews_dataset(dataset):
+
+        if os.path.exists(os.path.join(dataset, "train.csv")):
+
+            train_path = os.path.join(dataset, "train.csv")
+
+        else:
+            raise FileNotFoundError
+
+
+        if os.path.exists(os.path.join(dataset, "test.csv")):
+
+            test_path = os.path.join(dataset, "test.csv")
+
+        else:
+            raise FileNotFoundError
+
+        train_data = pd.read_csv(train_path)
+        test_data = pd.read_csv(test_path)
+
+        train_title = train_data['Title']
+        train_description = train_data['Description']
+
+        train_text = [title +" "+ description for title, description in zip(train_title, train_description)]
+
+        train_labels = train_data['Class Index'].values
+
+
+        test_title = test_data['Title']
+        test_description = test_data['Description']
+
+        test_text = [title +" "+ description for title, description in zip(test_title, test_description)]
+
+        test_labels = test_data['Class Index'].values
+
+
+        train_text, valid_text, train_labels, valid_labels = train_test_split(train_text, train_labels, train_size=0.85, random_state = 42)
+
+        #labels start from 0
+        train_labels = [label-1 for label in train_labels]
+
+        valid_labels = [label-1 for label in valid_labels]
+
+        test_labels = [label-1 for label in test_labels]
+
+
+        return train_text, train_labels, test_text, test_labels, valid_text, valid_labels
  
 
 def create_dataset_object(text, labels, n_tokens, tokenizer, dataset):

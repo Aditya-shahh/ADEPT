@@ -72,21 +72,21 @@ class APT(torch.nn.Module):
         if self.adapter_modules == 1:
         
         
-            # pass the output of embeddings into first 4 encoder layers
-            for i in range(4):
+            # pass the output of embeddings into first 8 encoder layers
+            for i in range(9):
                 
                 roberta_text = self.base_model.roberta.encoder.layer[i](roberta_text)[0]
                 
                 
-            # pass the ouput of 4th encoder layer to adapter module
+            # pass the ouput of 8th encoder layer to adapter module
             roberta_text = self.adapter_1(roberta_text)
             
             roberta_text = self.adapter_2(roberta_text)
             
             
-            # output of adapter layer to 5th encoder layer and so on
+            # output of adapter layer to 9th encoder layer and so on
                 
-            for i in range(4, 12):
+            for i in range(9, 12):
                 roberta_text = self.base_model.roberta.encoder.layer[i](roberta_text)[0]
         
         

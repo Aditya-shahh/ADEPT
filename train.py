@@ -11,7 +11,7 @@ import torch.nn as nn
 
 from torch.optim import lr_scheduler
 
-from dataset import create_dataset_object, load_imdb_dataset, load_topic_dataset
+from dataset import create_dataset_object, load_agnews_dataset, load_imdb_dataset, load_topic_dataset
 from dataloader import get_dataloaders
 
 from prompt import PROMPTEmbedding
@@ -29,17 +29,18 @@ from sklearn.metrics import recall_score
 
 
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings('ignore', '.*do not.*', )
+warnings.warn('Do not show this message')
 
 parser = argparse.ArgumentParser(description='APT')
 
-parser.add_argument('--epochs', default=15, type=int,
+parser.add_argument('--epochs', default=25, type=int,
                     help='number of epochs to run')
 
-parser.add_argument('--batch_size', default=32, type=int, metavar='N',
+parser.add_argument('--batch_size', default=16, type=int, metavar='N',
                     help='train batchsize')
 
-parser.add_argument('--lr', default=8e-5, type=float,
+parser.add_argument('--lr', default=4e-4, type=float,    #8e - 5
                     metavar='LR', help='learning rate for the model')
 
 parser.add_argument('--n_tokens', default=20, type=int,
@@ -48,8 +49,10 @@ parser.add_argument('--n_tokens', default=20, type=int,
 parser.add_argument('--adapter_modules', default=1, type=int,
                     help='number of adapter modules')
 
-parser.add_argument('--adapter_hidden_size', default=16, type=int,
+parser.add_argument('--adapter_hidden_size', default=32, type=int,
                     help='hidden size of adapter module')
+
+
 
 parser.add_argument('--model',
                     default='roberta-base',
@@ -59,10 +62,10 @@ parser.add_argument('--model',
                     help='select the model (default: %(default)s\)')
 
 parser.add_argument('--dataset',
-                    default='topic',
-                    const='topic',
+                    default='agnews',
+                    const='agnews',
                     nargs='?',
-                    choices=['imdb', 'topic', 'emotion'],
+                    choices=['imdb', 'topic', 'agnews'],
                     help='select dataset to test on (default: %(default)s\)')
 
 
@@ -86,6 +89,9 @@ parser.add_argument('--mode',
 
 parser.add_argument('--save_checkpoint', type=bool, default=True,
                     help='whether to save the model')
+
+parser.add_argument('--checkpoint', type=str, default=None,
+                    help='path to model checkpoint')
 
 parser.add_argument('--train', dest='train', help='Train the model', action='store_true')
 parser.add_argument('--no-train', dest='train', help='Train the model', action='store_false')
@@ -115,13 +121,19 @@ def train_model(config_train):
     epochs = config_train['epochs']
     save_checkpoint = config_train['save_checkpoint']
 
+    checkpoint = config_train['checkpoint']
+
 
     model = model.to(device)
 
     best_valid_f1 = 0.0
 
     if save_checkpoint:
-        saved_model_path = dataset + "_" + mode + '.pt'
+        if checkpoint != None:
+            saved_model_path = checkpoint
+        
+        else:
+            saved_model_path = dataset + "_" + mode + '.pt'
 
     for epoch in range(0, epochs):
         print('Epoch {}/{}'.format(epoch+1, epochs))
@@ -290,10 +302,11 @@ def main():
         
         val_data_object = create_dataset_object(valid_text, valid_labels, number_of_tokens, tokenizer, dataset)
 
-
         dataloaders = get_dataloaders(train_data_object, test_data_object, val_data_object, batch_size)
 
         num_labels = 2
+
+        print("IMDB dataset loaded succesfully\n")
 
 
     elif dataset == 'topic':
@@ -310,13 +323,28 @@ def main():
         dataloaders = get_dataloaders(train_data_object, test_data_object, val_data_object, batch_size)
 
         num_labels = 10
-    
-    elif dataset == 'emotion':
 
-        pass
+        print("Topic dataset loaded succesfully\n")
+    
+    elif dataset == 'agnews':
+
+        train_text, train_labels, test_text, test_labels, valid_text, valid_labels = load_agnews_dataset(dataset)
+
+        train_data_object = create_dataset_object(train_text, train_labels, number_of_tokens, tokenizer, dataset)
+        
+        test_data_object  = create_dataset_object(test_text, test_labels, number_of_tokens, tokenizer, dataset)
+        
+        val_data_object = create_dataset_object(valid_text, valid_labels, number_of_tokens, tokenizer, dataset)
+
+        dataloaders = get_dataloaders(train_data_object, test_data_object, val_data_object, batch_size)
+
+        num_labels = 4
+
+        print("AGnews dataset loaded succesfully\n")
+
 
     else:
-        print('Select one of the given datasets')
+        print('Select one of the given datasets\n')
 
 
 
@@ -337,6 +365,8 @@ def main():
 
             model = Prompt_Head(roberta, num_labels)
 
+            print("Promt-head model loaded successfully\n")
+
     elif mode == 'prompt':
         if model_type == 'roberta-base':
 
@@ -353,6 +383,8 @@ def main():
                                         initialize_from_vocab=True)
 
             model.set_input_embeddings(prompt_emb)
+
+            print("Prompt model loaded successfully\n")
 
     elif mode == 'apt':
         if model_type == 'roberta-base':
@@ -376,8 +408,10 @@ def main():
 
             model = APT(roberta, adapter_hidden_size, adapter_modules)
 
+            print("APT model loaded successfully\n")
+
     else:
-        print('Select one of the given modes')
+        print('Select one of the given modes\n')
 
     if args.count_params:
         count_parameters(model)
@@ -401,7 +435,7 @@ def main():
         # Defining LR Scheduler
         scheduler = get_linear_schedule_with_warmup(
             optimizer, 
-            num_warmup_steps=len(dataloaders['Train'])*epochs/40, 
+            num_warmup_steps=len(dataloaders['Train'])*epochs/30, 
             num_training_steps=len(dataloaders['Train'])*epochs
         )
 
@@ -416,7 +450,8 @@ def main():
             'mode':mode, 
             'scheduler': scheduler,
             'epochs': epochs,
-            'save_checkpoint': args.save_checkpoint
+            'save_checkpoint': args.save_checkpoint,
+            'checkpoint': args.checkpoint
         }
 
         train_model(config_train)
@@ -425,14 +460,18 @@ def main():
 
     if args.test:
 
-        saved_model_path = dataset + "_" + mode + '.pt'
+        if args.checkpoint == None:
+            saved_model_path = dataset + "_" + mode + '.pt'
+
+        else:
+            saved_model_path = args.checkpoint
 
         if os.path.exists(saved_model_path):
             model.load_state_dict(torch.load(saved_model_path))
             print("Model checkpoint loaded succesfully")
 
         else:
-            print("Required model checkpoint not found!")
+            print("Required model checkpoint not found!\n")
 
         config_test = {
         
