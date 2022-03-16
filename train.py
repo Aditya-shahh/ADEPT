@@ -83,7 +83,7 @@ parser.add_argument('--mode',
                     default='apt',
                     const='apt',
                     nargs='?',
-                    choices=['apt', 'prompt', 'prompt_head'],
+                    choices=['apt', 'prompt', 'finetune'],
                     help='select one of the training mode (default: %(default)s\)')
 
 
@@ -160,11 +160,12 @@ def train_model(config_train):
                     
                     labels = labels.to(device)
 
-                    if mode == 'prompt':
+
+                    if mode =='apt':
+                        output = model(input_ids = input_ids, attention_mask = attention_mask)
+                    else:
                         output = model(input_ids = input_ids, attention_mask = attention_mask).logits
 
-                    else:
-                        output = model(input_ids = input_ids, attention_mask = attention_mask)
 
                     loss = criterion(output, labels)
 
@@ -179,7 +180,6 @@ def train_model(config_train):
                         optimizer.step()             # Updates the weights
                         
                         scheduler.step()
-                        
                         
                     batch_loss += loss.item()
                         
@@ -243,11 +243,10 @@ def test_model(config_test):
             with torch.no_grad():
 
 
-                if mode == 'prompt':
-                    output = model(input_ids = input_ids, attention_mask = attention_mask).logits
-                    
-                else:
+                if mode =='apt':
                     output = model(input_ids = input_ids, attention_mask = attention_mask)
+                else:
+                    output = model(input_ids = input_ids, attention_mask = attention_mask).logits
 
                 loss = criterion(output, labels)
                 
@@ -296,11 +295,11 @@ def main():
 
         train_text, train_labels, test_text, test_labels, valid_text, valid_labels = load_imdb_dataset(dataset)
 
-        train_data_object = create_dataset_object(train_text, train_labels, number_of_tokens, tokenizer, dataset)
+        train_data_object = create_dataset_object(train_text, train_labels, number_of_tokens, tokenizer, dataset,  mode)
         
-        test_data_object  = create_dataset_object(test_text, test_labels, number_of_tokens, tokenizer, dataset)
+        test_data_object  = create_dataset_object(test_text, test_labels, number_of_tokens, tokenizer, dataset, mode)
         
-        val_data_object = create_dataset_object(valid_text, valid_labels, number_of_tokens, tokenizer, dataset)
+        val_data_object = create_dataset_object(valid_text, valid_labels, number_of_tokens, tokenizer, dataset, mode)
 
         dataloaders = get_dataloaders(train_data_object, test_data_object, val_data_object, batch_size)
 
@@ -313,11 +312,11 @@ def main():
 
         train_text, train_labels, test_text, test_labels, valid_text, valid_labels = load_topic_dataset(dataset)
 
-        train_data_object = create_dataset_object(train_text, train_labels, number_of_tokens, tokenizer, dataset)
+        train_data_object = create_dataset_object(train_text, train_labels, number_of_tokens, tokenizer, dataset, mode)
         
-        test_data_object  = create_dataset_object(test_text, test_labels, number_of_tokens, tokenizer, dataset)
+        test_data_object  = create_dataset_object(test_text, test_labels, number_of_tokens, tokenizer, dataset, mode)
         
-        val_data_object = create_dataset_object(valid_text, valid_labels, number_of_tokens, tokenizer, dataset)
+        val_data_object = create_dataset_object(valid_text, valid_labels, number_of_tokens, tokenizer, dataset, mode)
 
 
         dataloaders = get_dataloaders(train_data_object, test_data_object, val_data_object, batch_size)
@@ -330,11 +329,11 @@ def main():
 
         train_text, train_labels, test_text, test_labels, valid_text, valid_labels = load_agnews_dataset(dataset)
 
-        train_data_object = create_dataset_object(train_text, train_labels, number_of_tokens, tokenizer, dataset)
+        train_data_object = create_dataset_object(train_text, train_labels, number_of_tokens, tokenizer, dataset, mode)
         
-        test_data_object  = create_dataset_object(test_text, test_labels, number_of_tokens, tokenizer, dataset)
+        test_data_object  = create_dataset_object(test_text, test_labels, number_of_tokens, tokenizer, dataset, mode)
         
-        val_data_object = create_dataset_object(valid_text, valid_labels, number_of_tokens, tokenizer, dataset)
+        val_data_object = create_dataset_object(valid_text, valid_labels, number_of_tokens, tokenizer, dataset, mode)
 
         dataloaders = get_dataloaders(train_data_object, test_data_object, val_data_object, batch_size)
 
@@ -347,68 +346,59 @@ def main():
         print('Select one of the given datasets\n')
 
 
+    # Model Choice
+    if model_type == 'roberta-base':
+
+        model = RobertaForSequenceClassification.from_pretrained(model_type, 
+                                                         num_labels=num_labels,
+                                                         output_attentions=False,
+                                                         output_hidden_states=False)
 
     #Training modes
-    if mode == 'prompt_head':
+    if mode == 'finetune':
 
-        if model_type == 'roberta-base':
-
-            roberta = RobertaModel.from_pretrained(model_type)
-
-            roberta = freeze_params(roberta)
-            
-            prompt_emb = PROMPTEmbedding(roberta.get_input_embeddings(), 
-                                        n_tokens= number_of_tokens, 
-                                        initialize_from_vocab=True)
-
-            roberta.set_input_embeddings(prompt_emb)
-
-            model = Prompt_Head(roberta, num_labels)
-
-            print("Promt-head model loaded successfully\n")
+        print("Roberta base model loaded successfully\n")
 
     elif mode == 'prompt':
-        if model_type == 'roberta-base':
 
-            model = RobertaForSequenceClassification.from_pretrained(model_type, 
-                                                         num_labels=num_labels,
-                                                         output_attentions=False,
-                                                         output_hidden_states=False)
+        # model = RobertaForSequenceClassification.from_pretrained(model_type, 
+        #                                                 num_labels=num_labels,
+        #                                                 output_attentions=False,
+        #                                                 output_hidden_states=False)
 
-            model =  freeze_params(model)
+        model =  freeze_params(model)
 
-        
-            prompt_emb = PROMPTEmbedding(model.get_input_embeddings(), 
-                                        n_tokens= number_of_tokens, 
-                                        initialize_from_vocab=True)
+    
+        prompt_emb = PROMPTEmbedding(model.get_input_embeddings(), 
+                                    n_tokens= number_of_tokens, 
+                                    initialize_from_vocab=True)
 
-            model.set_input_embeddings(prompt_emb)
+        model.set_input_embeddings(prompt_emb)
 
-            print("Prompt model loaded successfully\n")
+        print("Prompt model loaded successfully\n")
 
     elif mode == 'apt':
-        if model_type == 'roberta-base':
 
-            adapter_hidden_size = args.adapter_hidden_size
-            adapter_modules = args.adapter_modules
-            
-            
-            roberta = RobertaForSequenceClassification.from_pretrained(model_type, 
-                                                         num_labels=num_labels,
-                                                         output_attentions=False,
-                                                         output_hidden_states=False)
+        adapter_hidden_size = args.adapter_hidden_size
+        adapter_modules = args.adapter_modules
+        
+        
+        # roberta = RobertaForSequenceClassification.from_pretrained(model_type, 
+        #                                                 num_labels=num_labels,
+        #                                                 output_attentions=False,
+        #                                                 output_hidden_states=False)
 
-            roberta = freeze_params(roberta)
+        roberta = freeze_params(model)
 
-            prompt_emb = PROMPTEmbedding(roberta.get_input_embeddings(), 
-                      n_tokens= number_of_tokens, 
-                      initialize_from_vocab=True)
+        prompt_emb = PROMPTEmbedding(roberta.get_input_embeddings(), 
+                    n_tokens= number_of_tokens, 
+                    initialize_from_vocab=True)
 
-            roberta.set_input_embeddings(prompt_emb)
+        roberta.set_input_embeddings(prompt_emb)
 
-            model = APT(roberta, adapter_hidden_size, adapter_modules)
+        model = APT(roberta, adapter_hidden_size, adapter_modules)
 
-            print("APT model loaded successfully\n")
+        print("APT model loaded successfully\n")
 
     else:
         print('Select one of the given modes\n')
@@ -472,6 +462,7 @@ def main():
 
         else:
             print("Required model checkpoint not found!\n")
+            raise FileNotFoundError
 
         config_test = {
         

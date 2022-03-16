@@ -13,7 +13,7 @@ class CustomDataset(torch.utils.data.Dataset):
     """
     This is our custom dataset class which will load the text and their corresponding labels into Pytorch tensors
     """
-    def __init__(self, labels, text, n_tokens, tokenizer, dataset):
+    def __init__(self, labels, text, n_tokens, tokenizer, dataset, mode):
         self.labels = labels
         self.text = text
         
@@ -22,6 +22,8 @@ class CustomDataset(torch.utils.data.Dataset):
 
         self.dataset = dataset
 
+        self.mode = mode
+
     def __getitem__(self, idx):
         sample = {}
         text = self.text[idx]
@@ -29,16 +31,29 @@ class CustomDataset(torch.utils.data.Dataset):
         max_length = 512
 
 
-        #Roberta Tokenizer to tokenize the text
-        inputs = self.tokenizer.encode_plus(text, 
-                                        add_special_tokens=True,   # Adds [CLS] and [SEP] token to every input text
-                                        max_length=max_length-self.n_tokens, 
-                                        truncation=True, 
-                                        return_tensors='pt',
-                                        padding="max_length")
-        
-        inputs['input_ids'] = torch.cat([torch.full((1,self.n_tokens), 5256), inputs['input_ids']], 1)
-        inputs['attention_mask'] = torch.cat([torch.full((1, self.n_tokens), 1), inputs['attention_mask']], 1)
+        if self.mode == 'finetune':
+
+            #Roberta Tokenizer to tokenize the text
+            inputs = self.tokenizer.encode_plus(text, 
+                                            add_special_tokens=True,   # Adds [CLS] and [SEP] token to every input text
+                                            max_length=max_length, 
+                                            truncation=True, 
+                                            return_tensors='pt',
+                                            padding="max_length")
+
+        else:
+
+
+            #Roberta Tokenizer to tokenize the text
+            inputs = self.tokenizer.encode_plus(text, 
+                                            add_special_tokens=True,   # Adds [CLS] and [SEP] token to every input text
+                                            max_length=max_length-self.n_tokens, 
+                                            truncation=True, 
+                                            return_tensors='pt',
+                                            padding="max_length")
+            
+            inputs['input_ids'] = torch.cat([torch.full((1,self.n_tokens), 5256), inputs['input_ids']], 1)
+            inputs['attention_mask'] = torch.cat([torch.full((1, self.n_tokens), 1), inputs['attention_mask']], 1)
 
         
         return inputs, torch.tensor(self.labels[idx])
@@ -157,6 +172,15 @@ def load_topic_dataset(dataset):
         del train_text_v1
         del train_labels_v1
 
+        #sample the dataset
+
+        train_text, _, train_labels, _ = train_test_split(train_text, train_labels, train_size=0.05, random_state = 42)
+
+        test_text, _, test_labels, _ = train_test_split(test_text, test_labels, train_size=0.1, random_state = 42)
+
+        valid_text, _, valid_labels, _ = train_test_split(valid_text, valid_labels, train_size=0.2, random_state = 42)
+
+
         return train_text, train_labels, test_text, test_labels, valid_text, valid_labels
 
 
@@ -209,7 +233,7 @@ def load_agnews_dataset(dataset):
         return train_text, train_labels, test_text, test_labels, valid_text, valid_labels
  
 
-def create_dataset_object(text, labels, n_tokens, tokenizer, dataset):
+def create_dataset_object(text, labels, n_tokens, tokenizer, dataset, mode):
     
     
     data_object = CustomDataset(
@@ -217,7 +241,8 @@ def create_dataset_object(text, labels, n_tokens, tokenizer, dataset):
             text = text,
             n_tokens=n_tokens,
             tokenizer=tokenizer,
-            dataset = dataset
+            dataset = dataset,
+            mode = mode
         )
 
     return data_object
