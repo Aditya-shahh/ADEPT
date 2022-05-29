@@ -5,6 +5,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 import torch
+import pickle
 from torch.utils.data import Dataset 
 
 import sys
@@ -41,6 +42,8 @@ class CustomDataset(torch.utils.data.Dataset):
                                             return_tensors='pt',
                                             padding="max_length")
 
+            return inputs, torch.tensor(self.labels[idx])
+
         else:
 
 
@@ -55,8 +58,9 @@ class CustomDataset(torch.utils.data.Dataset):
             inputs['input_ids'] = torch.cat([torch.full((1,self.n_tokens), 5256), inputs['input_ids']], 1)
             inputs['attention_mask'] = torch.cat([torch.full((1, self.n_tokens), 1), inputs['attention_mask']], 1)
 
+            return inputs, torch.tensor(self.labels[idx])
+
         
-        return inputs, torch.tensor(self.labels[idx])
     
     def __len__(self):
         return len(self.labels)
@@ -172,16 +176,39 @@ def load_topic_dataset(dataset):
         del train_text_v1
         del train_labels_v1
 
-        #sample the dataset
+        # #sample the dataset
 
-        train_text, _, train_labels, _ = train_test_split(train_text, train_labels, train_size=0.05, random_state = 42)
+        # train_text, _, train_labels, _ = train_test_split(train_text, train_labels, train_size=0.05, random_state = 42)
 
-        test_text, _, test_labels, _ = train_test_split(test_text, test_labels, train_size=0.1, random_state = 42)
 
-        valid_text, _, valid_labels, _ = train_test_split(valid_text, valid_labels, train_size=0.2, random_state = 42)
+        # valid_text, _, valid_labels, _ = train_test_split(valid_text, valid_labels, train_size=0.2, random_state = 42)
+
 
 
         return train_text, train_labels, test_text, test_labels, valid_text, valid_labels
+
+
+def load_yelp_dataset(dataset):
+
+    
+    with open(os.path.join(dataset, 'train_text.pkl'), 'rb') as f:
+        train_text = pickle.load(f)
+
+    with open(os.path.join(dataset, 'train_labels.pkl'), 'rb') as f:
+        train_labels = pickle.load(f)
+
+    with open(os.path.join(dataset, 'test_text.pkl'), 'rb') as f:
+        test_text = pickle.load(f)
+
+    with open(os.path.join(dataset, 'test_labels.pkl'), 'rb') as f:
+        test_labels = pickle.load(f)
+        
+    train_text, _, train_labels, _ = train_test_split(train_text, train_labels, train_size=0.1, random_state = 42)
+
+
+    train_text, valid_text, train_labels, valid_labels = train_test_split(train_text, train_labels, train_size=0.8, random_state = 42)
+
+    return train_text, train_labels, test_text, test_labels, valid_text, valid_labels
 
 
 def load_agnews_dataset(dataset):
@@ -229,6 +256,15 @@ def load_agnews_dataset(dataset):
 
         test_labels = [label-1 for label in test_labels]
 
+        # #validate
+        # train_text = train_text[:50]
+        # train_labels = train_labels[:50]
+
+        # valid_text = valid_text[:10]
+        # valid_labels = valid_labels[:10]
+
+        # test_text = test_text[:10]
+        # test_labels = test_labels[:10]
 
         return train_text, train_labels, test_text, test_labels, valid_text, valid_labels
  

@@ -144,9 +144,13 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+/yelp
 /topic
 /agnews
 *.pt
+
+*.csv
+*.pkl
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

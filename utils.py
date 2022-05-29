@@ -34,3 +34,11 @@ def freeze_params(model):
     param.requires_grad = False
 
   return model
+
+
+def freeze_params_roberta(model):
+  
+  for param in model.roberta.parameters():
+    param.requires_grad = False
+
+  return model
