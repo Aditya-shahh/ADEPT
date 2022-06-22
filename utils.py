@@ -36,9 +36,20 @@ def freeze_params(model):
   return model
 
 
-def freeze_params_roberta(model):
-  
-  for param in model.roberta.parameters():
-    param.requires_grad = False
+def freeze_params_encoder(model, model_type):
 
-  return model
+  if model_type == 'roberta-base':
+    
+    for param in model.roberta.parameters():
+      param.requires_grad = False
+
+    return model
+
+  if model_type == 'bert-base-cased':
+
+    for name, param in model.named_parameters():
+      if 'classifier' not in name: 
+        if "pooler" not in name:   
+          param.requires_grad = False
+
+    return model

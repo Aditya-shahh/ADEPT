@@ -3,6 +3,7 @@ import sys
 
 import time
 import random
+from unittest.mock import create_autospec
 import warnings
 import numpy as np
 import argparse
@@ -13,19 +14,16 @@ import torch.nn as nn
 
 from torch.optim import lr_scheduler, AdamW
 
-from dataset import create_dataset_object, load_agnews_dataset, load_imdb_dataset, load_topic_dataset, load_yelp_dataset
-from dataloader import get_dataloaders
-
-from prompt import PROMPTEmbedding
+from dataset import * 
 from model import APT
-from utils import freeze_params_roberta, get_accuracy, count_parameters, freeze_params
+from prompt import PROMPTEmbedding
+from dataloader import get_dataloaders
+from train import test_model, train_model
+from utils import freeze_params_encoder, get_accuracy, count_parameters, freeze_params
 
-from transformers import RobertaTokenizer, RobertaForSequenceClassification, RobertaModel
+from transformers import RobertaTokenizer, BertTokenizer, BertForSequenceClassification, RobertaForSequenceClassification
 from transformers import get_linear_schedule_with_warmup, logging
 
-
-
-from train import test_model, train_model
 
 
 warnings.filterwarnings('ignore', '.*do not.*', )
@@ -59,14 +57,14 @@ parser.add_argument('--model',
                     default='roberta-base',
                     const='roberta-base',
                     nargs='?',
-                    choices=['roberta-base', 'roberta-large'],
+                    choices=['roberta-base', 'bert-base-cased'],
                     help='select the model (default: %(default)s\)')
 
 parser.add_argument('--dataset',
                     default='agnews',
                     const='agnews',
                     nargs='?',
-                    choices=['imdb', 'topic', 'agnews', 'yelp'],
+                    choices=['imdb', 'topic', 'agnews', 'yelp', 'boolq', 'cb', 'rte'],
                     help='select dataset to test on (default: %(default)s\)')
 
 
@@ -141,6 +139,14 @@ def main():
     if model_type == 'roberta-base':
         tokenizer = RobertaTokenizer.from_pretrained(model_type)
 
+    elif model_type == 'bert-base-cased':
+        tokenizer = BertTokenizer.from_pretrained(model_type)
+
+    else:
+        print('Select one of the given models')
+
+
+
 
     #Dataset choice
     if dataset == 'imdb':
@@ -209,9 +215,58 @@ def main():
 
         print("Yelp dataset loaded succesfully\n")
 
+    elif dataset == 'boolq':
+
+        train_ques, train_pass, train_labels, val_ques, val_pass, val_labels, test_ques, test_pass = load_boolq_dataset(dataset)
+
+        train_data_object = create_superglue_dataset_object(train_ques, train_pass, train_labels, number_of_tokens, tokenizer, dataset, mode)
+        
+        test_data_object  = create_superglue_dataset_object(test_ques, test_pass, None, number_of_tokens, tokenizer, dataset, mode)
+        
+        val_data_object = create_superglue_dataset_object(val_ques, val_pass, val_labels, number_of_tokens, tokenizer, dataset, mode)
+
+        dataloaders = get_dataloaders(train_data_object, test_data_object, val_data_object, batch_size)
+
+        num_labels = 2
+
+        print("Boo1q dataset loaded succesfully\n")
+
+    elif dataset == 'cb':
+
+        train_prem, train_hypo, train_labels, val_prem, val_hypo, val_labels, test_prem, test_hypo = load_cb_dataset(dataset)
+
+        train_data_object = create_superglue_dataset_object(train_prem, train_hypo, train_labels, number_of_tokens, tokenizer, dataset, mode)
+        
+        test_data_object  = create_superglue_dataset_object(test_prem, test_hypo, None, number_of_tokens, tokenizer, dataset, mode)
+        
+        val_data_object = create_superglue_dataset_object(val_prem, val_hypo, val_labels, number_of_tokens, tokenizer, dataset, mode)
+
+        dataloaders = get_dataloaders(train_data_object, test_data_object, val_data_object, batch_size)
+
+        num_labels = 3
+
+        print("CB dataset loaded succesfully\n")
+
+    elif dataset == 'rte':
+
+        train_prem, train_hypo, train_labels, val_prem, val_hypo, val_labels, test_prem, test_hypo = load_rte_dataset(dataset)
+
+        train_data_object = create_superglue_dataset_object(train_prem, train_hypo, train_labels, number_of_tokens, tokenizer, dataset, mode)
+        
+        test_data_object  = create_superglue_dataset_object(test_prem, test_hypo, None, number_of_tokens, tokenizer, dataset, mode)
+        
+        val_data_object = create_superglue_dataset_object(val_prem, val_hypo, val_labels, number_of_tokens, tokenizer, dataset, mode)
+
+        dataloaders = get_dataloaders(train_data_object, test_data_object, val_data_object, batch_size)
+
+        num_labels = 2
+
+        print("RTE dataset loaded succesfully\n")
 
     else:
         print('Select one of the datasets')
+
+    # LOAD MODEL
     if model_type == 'roberta-base':
 
         model = RobertaForSequenceClassification.from_pretrained(model_type, 
@@ -219,10 +274,27 @@ def main():
                                                          output_attentions=False,
                                                          output_hidden_states=False)
 
+    elif model_type == 'bert-base-cased':
+
+        model = BertForSequenceClassification.from_pretrained(model_type, 
+                                                         num_labels=num_labels,
+                                                         output_attentions=False,
+                                                         output_hidden_states=False)
+
+    else:
+        print('Select one of the given models')
+
+
     #Training modes
     if mode == 'finetune':
 
-        print("Roberta model for finetuning loaded successfully\n")
+        if model_type == 'roberta-base':
+
+            print("Roberta model for finetuning loaded successfully\n")
+
+        if model_type == 'bert-base-cased':
+            print("Bert model for finetuning loaded successfully\n")
+
 
     elif mode == 'prompt':
 
@@ -240,37 +312,69 @@ def main():
 
         adapter_hidden_size = args.adapter_hidden_size
         adapter_modules = args.adapter_modules
+
+        if model_type == 'roberta-base':
+
+            roberta = freeze_params(model)
+
+            prompt_emb = PROMPTEmbedding(roberta.get_input_embeddings(), 
+                        n_tokens= number_of_tokens, 
+                        initialize_from_vocab=True)
+
+            roberta.set_input_embeddings(prompt_emb)
+
+            model = APT(roberta, adapter_hidden_size, adapter_modules, model_type)
+
+            print("Roberta APT model loaded successfully\n")
+
+
+        if model_type == 'bert-base-cased':
+
+            bert = freeze_params(model)
+
+            prompt_emb = PROMPTEmbedding(bert.get_input_embeddings(), 
+                        n_tokens= number_of_tokens, 
+                        initialize_from_vocab=True)
+
+            bert.set_input_embeddings(prompt_emb)
+
+            model = APT(bert, adapter_hidden_size, adapter_modules, model_type)
+
+            print("Bert APT model loaded successfully\n")
         
-
-        roberta = freeze_params(model)
-
-        prompt_emb = PROMPTEmbedding(roberta.get_input_embeddings(), 
-                    n_tokens= number_of_tokens, 
-                    initialize_from_vocab=True)
-
-        roberta.set_input_embeddings(prompt_emb)
-
-        model = APT(roberta, adapter_hidden_size, adapter_modules)
-
-        print("APT model loaded successfully\n")
 
     elif mode == 'prompthead':
 
-        model = freeze_params_roberta(model)
+        if model_type == 'roberta-base':
 
-        prompt_emb = PROMPTEmbedding(model.roberta.get_input_embeddings(), 
-                      n_tokens= number_of_tokens, 
-                      initialize_from_vocab=True)
+            model =  freeze_params_encoder(model, model_type)
 
-        model.roberta.set_input_embeddings(prompt_emb)
+            prompt_emb = PROMPTEmbedding(model.roberta.get_input_embeddings(), 
+                        n_tokens= number_of_tokens, 
+                        initialize_from_vocab=True)
 
-        print("Prompt head model loaded successfully\n")
+            model.roberta.set_input_embeddings(prompt_emb)
+
+            print("Prompt head model for Roberta loaded successfully\n")
+
+        if model_type == 'bert-base-cased':
+
+            model =  freeze_params_encoder(model, model_type)
+
+            prompt_emb = PROMPTEmbedding(model.bert.get_input_embeddings(), 
+                        n_tokens= number_of_tokens, 
+                        initialize_from_vocab=True)
+
+            model.bert.set_input_embeddings(prompt_emb)
+
+            print("Prompt head model for bert loaded successfully\n")
+
 
     elif mode == 'head':
 
-        model = freeze_params_roberta(model)
+        model =  freeze_params_encoder(model, model_type)
 
-        print("Roberta model for head finetuning loaded successfully\n")
+        print("Model for head finetuning loaded successfully\n")
 
 
     else:
@@ -289,11 +393,8 @@ def main():
 
 
         #optimizer
-        if mode == 'prompt':
-            optimizer = AdamW([model.roberta.embeddings.word_embeddings.learned_embedding], lr = learning_rate, eps=1e-8)
 
-        else:
-            optimizer = AdamW(model.parameters(), lr = learning_rate, eps=1e-8)
+        optimizer = AdamW(model.parameters(), lr = learning_rate, eps=1e-8)
 
         # Defining LR Scheduler
         scheduler = get_linear_schedule_with_warmup(
@@ -314,7 +415,8 @@ def main():
             'scheduler': scheduler,
             'epochs': epochs,
             'save_checkpoint': args.save_checkpoint,
-            'checkpoint': args.checkpoint
+            'checkpoint': args.checkpoint,
+            'model_type': model_type
         }
 
         train_model(config_train)
@@ -323,7 +425,7 @@ def main():
     if args.test:
 
         if args.checkpoint == None:
-            saved_model_path = os.path.join("saved_models", dataset + "_" + mode + '.pt')
+            saved_model_path = os.path.join("saved_models", model_type + "_" + dataset + "_" + mode + '.pt')
 
         else:
             saved_model_path = os.path.join("saved_models", args.checkpoint)
@@ -340,9 +442,11 @@ def main():
         
         'model': model, 
         'test_loader':dataloaders['Test'], 
+        'dataset':dataset,
         'device': device, 
         'criterion':criterion,
-        'mode':mode
+        'mode':mode,
+        'model_type': model_type
         }
 
         test_model(config_test)

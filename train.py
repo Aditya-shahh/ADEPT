@@ -1,4 +1,5 @@
 import os
+import json
 import torch
 from tqdm import tqdm
 
@@ -18,11 +19,36 @@ def test_model(config_test):
 
     model = config_test['model']
     test_loader = config_test['test_loader']
+    dataset = config_test['dataset']
     device = config_test['device']
     criterion = config_test['criterion']
     mode = config_test['mode']
 
     model = model.to(device)
+
+    if dataset == 'boolq':
+        out_file = 'BoolQ.jsonl'
+        label_map = {0:'true',
+                     1:'false'}
+
+        out_list = []
+
+    if dataset == 'cb':
+
+        out_file = 'CB.jsonl'
+        label_map = {0:'contradiction',
+                     1:'entailment',
+                     2: 'neutral'}
+
+        out_list = []
+
+    if dataset == 'rte':
+
+        out_file = 'RTE.jsonl'
+        label_map = {0:'entailment',
+                     1:'not_entailment'}
+
+        out_list = []
 
 
     batch_loss = 0.0   #batch loss
@@ -43,7 +69,8 @@ def test_model(config_test):
             input_ids =  data['input_ids'].squeeze(1).to(device)
             attention_mask = data['attention_mask'].squeeze(1).to(device)
 
-            labels = labels.to(device)
+            if dataset != 'boolq':
+                labels = labels.to(device)
             
             with torch.no_grad():
 
@@ -53,24 +80,58 @@ def test_model(config_test):
                 else:
                     output = model(input_ids = input_ids, attention_mask = attention_mask).logits
 
-                loss = criterion(output, labels)
-                
-                _, preds = output.data.max(1)
-                y_pred.extend(preds.tolist())
-                y_true.extend(labels.tolist())
-                
-                batch_acc = get_accuracy(y_pred, y_true)
-                batch_loss += loss.item()
-                
-            tepoch.set_postfix(loss = batch_loss/(idx+1), accuracy = batch_acc )
+                if dataset != 'boolq' and dataset != "cb" and  dataset !=  "rte":
+
+                    loss = criterion(output, labels)
+                    
+                    _, preds = output.data.max(1)
+                    y_pred.extend(preds.tolist())
+                    y_true.extend(labels.tolist())
+                    
+                    batch_acc = get_accuracy(y_pred, y_true)
+                    batch_loss += loss.item()
+
+                else:
+
+                    _, preds = output.data.max(1)
 
 
-    pre = precision_score(y_true, y_pred, average='macro')
-    recall = recall_score(y_true, y_pred, average='macro')
-    f1 = f1_score(y_true, y_pred, average='macro')
-    print("")
+                    preds = preds.tolist()
 
-    print("F1: {:.6f}, Precision: {:.6f}, Recall : {:.6f}".format(f1, pre, recall))
+                    for pred in preds:
+                        
+                        predicted_label = label_map[pred]
+
+                        ind = len(out_list)
+
+                        entry = {"idx": ind,                            
+                                "label": predicted_label}
+
+                        out_list.append(entry)
+
+
+            if dataset != 'boolq' and  dataset !=  "cb" and  dataset !=  "rte":
+                
+                tepoch.set_postfix(loss = batch_loss/(idx+1), accuracy = batch_acc )
+
+
+    if dataset != 'boolq' and  dataset !=  "cb" and  dataset !=  "rte":
+        pre = precision_score(y_true, y_pred, average='macro')
+        recall = recall_score(y_true, y_pred, average='macro')
+        f1 = f1_score(y_true, y_pred, average='macro')
+        print("")
+
+        print("F1: {:.6f}, Precision: {:.6f}, Recall : {:.6f}".format(f1, pre, recall))
+
+    else:
+
+        with open(out_file, 'a') as json_file:
+            
+            for item in out_list:
+                
+                json_file.write(json.dumps(item) + "\n")
+
+        print('Output file stored for {} dataset'.format(dataset))
 
 
 
@@ -88,6 +149,8 @@ def train_model(config_train):
     epochs = config_train['epochs']
     save_checkpoint = config_train['save_checkpoint']
 
+    model_type = config_train['model_type']
+
     checkpoint = config_train['checkpoint']
 
 
@@ -100,7 +163,7 @@ def train_model(config_train):
             saved_model_path = os.path.join("saved_models", checkpoint)
         
         else:
-            saved_model_path = os.path.join("saved_models", dataset + "_" + mode + '.pt')
+            saved_model_path = os.path.join("saved_models", model_type + "_" + dataset + "_" + mode + '.pt')
 
     print("Model will be saved at", saved_model_path)
 
@@ -130,19 +193,20 @@ def train_model(config_train):
                     
                     labels = labels.to(device)
 
+                    if model_type == 'roberta-base':
+                        if mode =='apt':
+                            output = model(input_ids = input_ids, attention_mask = attention_mask)
 
-                    if mode =='apt':
-                        output = model(input_ids = input_ids, attention_mask = attention_mask)
+                        else:
+                            output = model(input_ids = input_ids, attention_mask = attention_mask).logits
 
-                    else:
-                        output = model(input_ids = input_ids, attention_mask = attention_mask).logits
+                    if model_type == 'bert-base-cased':
 
+                        if mode =='apt':
+                            output = model(input_ids = input_ids, attention_mask = attention_mask)
 
-                    # elif mode == 'finetune' or mode == 'head':
-                    #      output = model(input_ids = input_ids, attention_mask = attention_mask).logits
-
-                    # else:  # prompt and prompt head
-                    #     output = model(input_ids = input_ids, attention_mask = attention_mask).logits
+                        else:
+                            output = model(input_ids = input_ids, attention_mask = attention_mask).logits
 
                     loss = criterion(output, labels)
 
