@@ -4,6 +4,8 @@
 
 **Authors**: Aditya Shah, Surendrabikram Thapa, Aneesh Jain and Lifu Huang. (All authors are affiliated to Department of Computer Science, Virginia Tech, Blacksburg, USA)
 
+Find our paper in **ACL Anthology**: [https://aclanthology.org/2023.sustainlp-1.8/](https://aclanthology.org/2023.sustainlp-1.8/)
+
 **Abstract**: Fine-tuning large pre-trained models for downstream tasks can be really expensive. In the past, researchers have proposed various alternatives like adapter and prompt-based methods for tuning these large language models using minimal parameters. However, applying prompt-tuning for smaller language models has not been effective so far and not much work is done in pushing forward soft prompting for these smaller models. To improve the training efficiency of the language models and reduce the size of tuned parameters, we propose a novel **Adapter-based Efficient Prompt Tuning approach (ADEPT)**. In this paper, we show that tuning the parameters of soft prompts with adapter modules while keeping the rest of the model frozen can be a promising method to optimize smaller language models for downstream tasks. Our method achieves up to **98% performance** of full fine-tuning while using only **0.02% of total model parameters**.
 
 If you find our paper useful, please cite us using the bib file:
