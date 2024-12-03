@@ -7,14 +7,11 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
-
-
 from torch.optim import lr_scheduler
 
 
 #TEST MODEL
 def test_model(config_test):
-
     model = config_test['model']
     test_loader = config_test['test_loader']
     dataset = config_test['dataset']
