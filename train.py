@@ -2,9 +2,7 @@ import os
 import json
 import torch
 from tqdm import tqdm
-
 from utils import get_accuracy
-
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score
 from sklearn.metrics import precision_score
